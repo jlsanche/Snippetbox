@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"alexwards.net/snippetbox/pkg/models"
+	"golang.org/x/sync/errgroup"
 )
 
 //define snippetModel type which wraps a sql.DB connection pool
@@ -46,5 +47,39 @@ func (m *SnippetModel) Get(id int) (*models.Snippet, error) {
 }
 
 func (m *SnippetModel) Latest() ([]*models.Snippet, error) {
-	return nil, nil
+
+	//A) write sql statement
+	stmt := `SELECT id, title, content, created, expires FROM snippets
+	WHERE expires > UTC_TIMESTAMP() ORDER BY created DESC LIMIT 10`
+
+	//B use method on conx pool to exe sql stmt 
+	rows, err := m.DB.Query(stmt)
+	if err != nil {
+		return nil, err
+	}
+
+	//C come after error checking 
+	defer rows.Close()
+
+	//D slice to store snippets
+	snippets := []*models.Snippet{}
+
+	for rows.Next() {
+		s := &models.Snippet {}
+
+		err = rows.Scan(&s.ID, &s.Title, &s.Content, &s.Created, &s.Expires)
+
+		if err != nil {
+			return nil, err
+		}
+
+		snippets = append(snippets, s)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+
+	return snippets, nil
 }
